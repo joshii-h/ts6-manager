@@ -62,8 +62,10 @@ export default function Clients() {
         accessorKey: 'client_away',
         header: t('clients.status'),
         cell: ({ row }) => {
-          if (row.original.client_away) return <Badge variant="warning" className="text-[10px]">{t('clients.away')}</Badge>;
-          if (row.original.client_input_muted) return <Badge variant="secondary" className="text-[10px]">{t('clients.muted')}</Badge>;
+          // WebQuery sends every field as a string, so an idle client arrives as "0" —
+          // truthy in JS, which used to badge everyone as away. Compare numerically.
+          if (Number(row.original.client_away) === 1) return <Badge variant="warning" className="text-[10px]">{t('clients.away')}</Badge>;
+          if (Number(row.original.client_input_muted) === 1) return <Badge variant="secondary" className="text-[10px]">{t('clients.muted')}</Badge>;
           return <Badge variant="success" className="text-[10px]">{t('clients.active')}</Badge>;
         },
       },

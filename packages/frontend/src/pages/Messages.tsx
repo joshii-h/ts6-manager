@@ -36,11 +36,16 @@ export default function Messages() {
     { accessorKey: 'senderName', header: t('messages.columnFrom'), cell: ({ getValue }) => <span className="font-medium">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'subject', header: t('messages.columnSubject') },
     { accessorKey: 'timestamp', header: t('messages.columnDate'), cell: ({ getValue }) => <span className="text-xs text-muted-foreground">{timeAgo(getValue() as number)}</span> },
-    { accessorKey: 'flag_read', header: t('messages.columnStatus'), cell: ({ getValue }) => (
-      <span className={`text-xs px-1.5 py-0.5 rounded ${getValue() ? 'bg-muted text-muted-foreground' : 'bg-primary/20 text-primary font-medium'}`}>
-        {getValue() ? t('messages.statusRead') : t('messages.statusUnread')}
-      </span>
-    )},
+    { accessorKey: 'flag_read', header: t('messages.columnStatus'), cell: ({ getValue }) => {
+      // Raw WebQuery field: unread arrives as the string "0", which is truthy in JS and
+      // used to mark every message read. Number() handles both the string and a real 0/1.
+      const read = Number(getValue()) === 1;
+      return (
+        <span className={`text-xs px-1.5 py-0.5 rounded ${read ? 'bg-muted text-muted-foreground' : 'bg-primary/20 text-primary font-medium'}`}>
+          {read ? t('messages.statusRead') : t('messages.statusUnread')}
+        </span>
+      );
+    }},
     {
       id: 'actions', header: '',
       cell: ({ row }) => (
