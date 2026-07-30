@@ -7,12 +7,23 @@ import { StreamSignaling, type ActiveStream, type SignalingMessage } from './str
 import { SidecarClient } from './streaming/sidecar-client.js';
 import { SidecarProcess, type SidecarConfig } from './streaming/sidecar-process.js';
 import { STREAM_PRESETS, DEFAULT_PRESET, type VideoViewerInfo, type VideoStreamStatus } from './streaming/types.js';
-import { getCookieArgs, runYtDlp } from './audio/youtube.js';
+import { getCookieArgs, runYtDlp, assertSafeUrl } from './audio/youtube.js';
+import { validateUrl } from '../utils/url-validator.js';
 
 /** Resolve a YouTube/yt-dlp-compatible URL to a direct stream URL */
 async function resolveVideoUrl(url: string, maxHeight: number = 720): Promise<string> {
+  // Reject a source that could be parsed as a yt-dlp/ffmpeg option.
+  assertSafeUrl(url);
+
   // Only resolve YouTube and other yt-dlp-supported sites
   if (!url.includes('youtube.com/') && !url.includes('youtu.be/') && !url.includes('twitch.tv/')) {
+    // A non-yt-dlp source is passed straight to the sidecar/ffmpeg, so validate
+    // it against SSRF (private IPs, cloud-metadata endpoints, non-http(s) schemes)
+    // the same way the audio/radio path does before handing a URL to ffmpeg.
+    const urlCheck = await validateUrl(url, { allowedProtocols: ['http:', 'https:'] });
+    if (!urlCheck.valid) {
+      throw new Error(`Video source blocked: ${urlCheck.error}`);
+    }
     return url;
   }
 
@@ -25,6 +36,7 @@ async function resolveVideoUrl(url: string, maxHeight: number = 720): Promise<st
     '-f', formatFilter,
     '--no-playlist',
     '-g',  // print direct URL only
+    '--',  // no option parsing past this point — URL is a positional
     url,
   ], 60_000, { lowPriority: false });
 

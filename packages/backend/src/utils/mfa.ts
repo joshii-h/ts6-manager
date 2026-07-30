@@ -29,13 +29,13 @@ function hashRecoveryCode(code: string): string {
 
 /**
  * Generate plaintext recovery codes (shown once) plus their hashes (stored).
- * Codes look like "a1b2-c3d4".
+ * Codes look like "a1b2-c3d4-e5f6-a7b8" (64 bits of crypto-random entropy).
  */
 export function generateRecoveryCodes(): { plain: string[]; hashed: string[] } {
   const plain: string[] = [];
   for (let i = 0; i < RECOVERY_CODE_COUNT; i++) {
-    const raw = crypto.randomBytes(4).toString('hex'); // 8 hex chars
-    plain.push(`${raw.slice(0, 4)}-${raw.slice(4)}`);
+    const raw = crypto.randomBytes(8).toString('hex'); // 16 hex chars = 64 bits
+    plain.push(`${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12)}`);
   }
   return { plain, hashed: plain.map(hashRecoveryCode) };
 }

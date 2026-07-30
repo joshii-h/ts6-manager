@@ -1022,18 +1022,22 @@ func (s *Sidecar) Stop() {
 var peerIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 var bitrateRe = regexp.MustCompile(`^[0-9]{1,6}[kKmM]?$`)
 
-// validSource accepts an empty source (test pattern), an http(s) URL, or a
-// local path. Anything starting with '-' is rejected so a malicious source
-// cannot be parsed as an extra FFmpeg flag.
+// validSource accepts an empty source (test pattern) or an http(s) URL only.
+// Anything starting with '-' is rejected so a malicious source cannot be
+// parsed as an extra FFmpeg flag, and non-http(s) values (local file paths,
+// other schemes) are rejected to prevent SSRF / local-file access.
 func validSource(source string) bool {
 	if source == "" {
 		return true
 	}
-	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
-		_, err := url.Parse(source)
-		return err == nil
+	if strings.HasPrefix(source, "-") {
+		return false
 	}
-	return !strings.HasPrefix(source, "-")
+	if !strings.HasPrefix(source, "http://") && !strings.HasPrefix(source, "https://") {
+		return false
+	}
+	_, err := url.Parse(source)
+	return err == nil
 }
 
 // secureAPI caps request bodies and, when a token is configured, requires
@@ -1062,7 +1066,9 @@ func main() {
 	listenAddr := envOrDefault("SIDECAR_LISTEN_ADDR", "127.0.0.1")
 	apiToken := os.Getenv("SIDECAR_TOKEN")
 	if apiToken == "" {
-		log.Println("[WARN] SIDECAR_TOKEN is not set — the HTTP API accepts unauthenticated requests. Set a token shared with the backend.")
+		// Fail closed: without a shared token the HTTP API would serve
+		// unauthenticated requests, so refuse to start rather than warn.
+		log.Fatal("SIDECAR_TOKEN is required")
 	}
 
 	sidecar := NewSidecar()

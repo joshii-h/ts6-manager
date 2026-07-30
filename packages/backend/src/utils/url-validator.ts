@@ -53,6 +53,11 @@ export interface ValidateUrlResult {
 /**
  * Validate a URL for safety against SSRF attacks.
  * Blocks private IPs, cloud metadata endpoints, and non-HTTP protocols.
+ *
+ * NOTE: This only validates the URL it is given. A later HTTP redirect can point
+ * at an internal host, so callers that fetch user-supplied URLs must either
+ * disable auto-redirects (axios `maxRedirects: 0`) or re-validate each redirect
+ * target with this function before following it.
  */
 export async function validateUrl(
   url: string,

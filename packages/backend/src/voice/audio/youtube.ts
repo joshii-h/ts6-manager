@@ -38,6 +38,17 @@ export function getCookieArgs(): string[] {
   return args;
 }
 
+/**
+ * Reject a URL that could be parsed as a yt-dlp/ffmpeg option. A literal '--'
+ * is also placed before the URL positional at every call site, but guarding
+ * here rejects hostile input as early as possible.
+ */
+export function assertSafeUrl(url: string): void {
+  if (url.startsWith("-")) {
+    throw new Error('Invalid URL: must not start with "-"');
+  }
+}
+
 // The first run may also fetch remote challenge-solver components, so the
 // info timeout is generous.
 const INFO_TIMEOUT_MS = 60_000;
@@ -153,6 +164,7 @@ const inFlight = new Map<string, Promise<{ filePath: string; info: YouTubeInfo }
  * Download audio from a YouTube URL using yt-dlp
  */
 export function downloadYouTube(url: string, outputDir: string): Promise<{ filePath: string; info: YouTubeInfo }> {
+  assertSafeUrl(url);
   const existing = inFlight.get(url);
   if (existing) return existing;
 
@@ -164,7 +176,7 @@ export function downloadYouTube(url: string, outputDir: string): Promise<{ fileP
 async function doDownload(url: string, outputDir: string): Promise<{ filePath: string; info: YouTubeInfo }> {
   // First get info
   const infoJson = await runYtDlp(
-    [...getCookieArgs(), "--dump-json", "--no-playlist", url],
+    [...getCookieArgs(), "--dump-json", "--no-playlist", "--", url],
     INFO_TIMEOUT_MS,
   );
 
@@ -207,6 +219,7 @@ async function doDownload(url: string, outputDir: string): Promise<{ filePath: s
       "--no-playlist",
       "--no-progress",
       "-o", path.join(outputDir, "%(id)s.%(ext)s"),
+      "--",
       url,
     ],
     DOWNLOAD_TIMEOUT_MS,
@@ -228,8 +241,9 @@ async function doDownload(url: string, outputDir: string): Promise<{ filePath: s
  * Returns type ('video' or 'playlist') and array of items.
  */
 export async function getYouTubeUrlInfo(url: string): Promise<{ type: 'video' | 'playlist'; items: YouTubeSearchResult[] }> {
+  assertSafeUrl(url);
   const output = await runYtDlp(
-    [...getCookieArgs(), "--dump-json", "--flat-playlist", "--no-download", url],
+    [...getCookieArgs(), "--dump-json", "--flat-playlist", "--no-download", "--", url],
     INFO_TIMEOUT_MS,
   );
 
@@ -258,7 +272,7 @@ export async function getYouTubeUrlInfo(url: string): Promise<{ type: 'video' | 
  */
 export async function searchYouTube(query: string, maxResults: number = 10): Promise<YouTubeSearchResult[]> {
   const output = await runYtDlp(
-    [...getCookieArgs(), `ytsearch${maxResults}:${query}`, "--dump-json", "--flat-playlist", "--no-download"],
+    [...getCookieArgs(), "--dump-json", "--flat-playlist", "--no-download", "--", `ytsearch${maxResults}:${query}`],
     INFO_TIMEOUT_MS,
   );
 
