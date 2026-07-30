@@ -71,6 +71,7 @@
     "useAnotherAccount": "Iniciar sesión con otra cuenta",
     "or": "o",
     "sso": "Iniciar sesión con SSO",
+    "authentikSso": "Iniciar sesión con Authentik",
     "ssoProcessing": "Iniciando sesión…",
     "backToLogin": "Volver al inicio de sesión",
     "ssoError": {

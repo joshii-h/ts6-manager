@@ -71,6 +71,7 @@
     "useAnotherAccount": "Accedi con un altro account",
     "or": "o",
     "sso": "Accedi tramite SSO",
+    "authentikSso": "Accedi con Authentik",
     "ssoProcessing": "Accesso in corso…",
     "backToLogin": "Torna all'accesso",
     "ssoError": {

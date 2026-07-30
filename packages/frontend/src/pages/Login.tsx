@@ -33,6 +33,7 @@ export default function Login() {
   const [trustDevice, setTrustDevice] = useState(false);
   const [trustedName, setTrustedName] = useState('');
   const [samlEnabled, setSamlEnabled] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
 
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
@@ -72,6 +73,7 @@ export default function Login() {
 
   useEffect(() => {
     authApi.samlStatus().then((s) => setSamlEnabled(s.enabled)).catch(() => {});
+    authApi.ssoStatus().then((s) => setSsoEnabled(s.enabled)).catch(() => {});
   }, []);
 
   // SSO handoff: SsoCallback navigates here with { state: { mfa } } when the SAML
@@ -115,6 +117,20 @@ export default function Login() {
       await routeAuth(await authApi.login(username, password, trustDevice));
     } catch {
       setError(t('login.invalidCredentials'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Reverse-proxy header SSO: the proxy (Authentik) already authenticated the user;
+  // this exchanges the trusted header for a session via the backend, same routing as login.
+  const handleProxySso = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      await routeAuth(await authApi.sso());
+    } catch {
+      setError(t('login.ssoError.generic'));
     } finally {
       setBusy(false);
     }
@@ -235,14 +251,23 @@ export default function Login() {
                     {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> {t('login.signingIn')}</> : t('login.signIn')}
                   </Button>
                 </form>
-                {samlEnabled && (
+                {(samlEnabled || ssoEnabled) && (
                   <>
                     <div className="my-3 flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="h-px flex-1 bg-border" /> {t('login.or')} <div className="h-px flex-1 bg-border" />
                     </div>
-                    <a href={ssoLoginUrl} className="block">
-                      <Button type="button" variant="outline" className="w-full">{t('login.sso')}</Button>
-                    </a>
+                    <div className="space-y-2">
+                      {ssoEnabled && (
+                        <Button type="button" variant="outline" className="w-full" onClick={handleProxySso} disabled={busy}>
+                          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('login.authentikSso')}
+                        </Button>
+                      )}
+                      {samlEnabled && (
+                        <a href={ssoLoginUrl} className="block">
+                          <Button type="button" variant="outline" className="w-full">{t('login.sso')}</Button>
+                        </a>
+                      )}
+                    </div>
                   </>
                 )}
               </>

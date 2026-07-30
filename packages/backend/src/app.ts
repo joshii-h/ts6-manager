@@ -75,6 +75,18 @@ export function createApp(): Express {
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/refresh', authLimiter);
 
+  // Reverse-proxy header SSO: lenient per-IP cap (POST only, so the status GET the
+  // login page polls stays unlimited). Guards refresh-token row growth; brute force
+  // isn't the threat since callers already passed the proxy's auth.
+  const proxySsoLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many attempts, please try again later' },
+  });
+  app.post('/api/auth/sso', proxySsoLimiter);
+
   // Global API rate limit (auth endpoints above keep their stricter limit)
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000,

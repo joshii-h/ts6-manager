@@ -71,6 +71,7 @@
     "useAnotherAccount": "Sign in with a different account",
     "or": "or",
     "sso": "Sign in via SSO",
+    "authentikSso": "Sign in with Authentik",
     "ssoProcessing": "Signing in…",
     "backToLogin": "Back to sign in",
     "ssoError": {

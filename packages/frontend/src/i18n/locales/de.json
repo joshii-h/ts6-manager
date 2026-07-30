@@ -71,6 +71,7 @@
     "useAnotherAccount": "Mit einem anderen Konto anmelden",
     "or": "oder",
     "sso": "Über SSO anmelden",
+    "authentikSso": "Mit Authentik anmelden",
     "ssoProcessing": "Anmeldung läuft…",
     "backToLogin": "Zurück zur Anmeldung",
     "ssoError": {

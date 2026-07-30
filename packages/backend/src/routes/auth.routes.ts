@@ -13,6 +13,7 @@ import QRCode from 'qrcode';
 import { createTrustedDevice, clearTrustedCookie, resolveTrustedCookie } from '../utils/trusted-device-service.js';
 import { TRUSTED_COOKIE_NAME } from '../utils/trusted-device.js';
 import { issueSession, gateAfterPassword } from '../auth/session.js';
+import { disambiguateUsername } from '../auth/saml/saml-user.js';
 
 export const authRoutes: Router = Router();
 
@@ -105,6 +106,90 @@ authRoutes.post('/login', async (req: Request, res: Response, next) => {
     const result = await gateAfterPassword(prisma, user);
     if ((result as any).accessToken) await maybeTrustDevice(prisma, req, res, user.id, req.body.trustDevice);
     res.json(result);
+  } catch (err) { next(err); }
+});
+
+// Whether the reverse-proxy header SSO ("Login with Authentik") button should be shown.
+authRoutes.get('/sso/status', (_req: Request, res: Response) => {
+  res.json({ enabled: config.trustProxyAuth });
+});
+
+// Reverse-proxy (Authentik forward-auth) trusted-header SSO: when enabled, a request
+// carrying the trusted X-authentik-username header (set/overwritten by the proxy) is
+// authenticated without a password, JIT-provisioning the account and reusing the same
+// gateAfterPassword flow as local/SAML login (so MFA enforcement still applies).
+authRoutes.post('/sso', async (req: Request, res: Response, next) => {
+  const journal = req.app.locals.connectionJournal;
+  const header = (name: string): string => {
+    const raw = req.headers[name];
+    return (Array.isArray(raw) ? raw[0] : raw || '').trim();
+  };
+  const username = header(config.proxyAuthHeaderUser);
+  try {
+    if (!config.trustProxyAuth) throw new AppError(404, 'Not found');
+
+    if (!username) throw new AppError(401, 'No trusted identity header present');
+    const displayName = header(config.proxyAuthHeaderName) || username;
+    // Key the account on the IdP's stable uid so an Authentik username rename still maps
+    // to the same local account; fall back to the username when no uid header is sent.
+    const externalId = header(config.proxyAuthHeaderUid) || username;
+
+    const prisma = req.app.locals.prisma;
+    if (await isIpWebBanned(prisma, req.ip || '')) {
+      journal?.recordWebLogin(username, req.ip || '', false);
+      throw new AppError(403, 'Access denied');
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { authProvider_externalId: { authProvider: 'proxy', externalId } },
+    });
+    if (user) {
+      if (!user.enabled) {
+        journal?.recordWebLogin(user.username, req.ip || '', false);
+        throw new AppError(403, 'Account disabled');
+      }
+      // Keep the display name aligned with the IdP (proxy is authoritative for identity).
+      if (user.displayName !== displayName) {
+        user = await prisma.user.update({ where: { id: user.id }, data: { displayName } });
+      }
+    } else {
+      const clashes = await prisma.user.findMany({
+        where: { username: { startsWith: username } },
+        select: { username: true },
+      });
+      const taken = new Set<string>(clashes.map((c: { username: string }) => c.username));
+      const finalUsername = disambiguateUsername(username, (c) => taken.has(c));
+      try {
+        user = await prisma.user.create({
+          data: {
+            username: finalUsername,
+            displayName,
+            role: config.proxyAuthDefaultRole,
+            authProvider: 'proxy',
+            externalId,
+            passwordHash: null,
+            enabled: true,
+          },
+        });
+      } catch (e: unknown) {
+        // Concurrent first-login race on the (authProvider, externalId) unique — refetch.
+        if ((e as { code?: string })?.code === 'P2002') {
+          user = await prisma.user.findUnique({
+            where: { authProvider_externalId: { authProvider: 'proxy', externalId } },
+          });
+        } else {
+          throw e;
+        }
+      }
+      if (!user) throw new AppError(500, 'Failed to provision SSO account');
+      if (!user.enabled) {
+        journal?.recordWebLogin(user.username, req.ip || '', false);
+        throw new AppError(403, 'Account disabled');
+      }
+    }
+
+    journal?.recordWebLogin(user.username, req.ip || '', true);
+    res.json(await gateAfterPassword(prisma, user));
   } catch (err) { next(err); }
 });
 

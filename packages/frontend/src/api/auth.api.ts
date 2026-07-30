@@ -52,4 +52,10 @@ export const authApi = {
     api.get('/auth/saml/status').then((r) => r.data),
   samlExchange: (code: string) =>
     api.post('/auth/saml/exchange', { code }).then((r) => r.data),
+
+  // Reverse-proxy (Authentik forward-auth) trusted-header SSO
+  ssoStatus: (): Promise<{ enabled: boolean }> =>
+    api.get('/auth/sso/status').then((r) => r.data),
+  sso: () =>
+    api.post('/auth/sso', {}, { withCredentials: true }).then((r) => r.data),
 };
